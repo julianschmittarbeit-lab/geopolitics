@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,16 +8,24 @@
     <link rel="stylesheet" href="styles/components.css" />
   </head>
   <body>
-    <!-- Root containers from DESIGN section 8. The full UI is wired in a later
-         feature; for now main.js just confirms the engine boots cleanly. -->
-    <div id="app">
-      <header id="topbar">GEOPOLIS</header>
+    <!-- Start screen (New Game / Continue / Import). Shown first, then hidden. -->
+    <div id="start-screen" aria-label="Start"></div>
+
+    <!-- Main app shell from DESIGN section 8: top bar, map + context panel,
+         queued-actions tray, event log. Hidden until a game is started. -->
+    <div id="app" class="hidden">
+      <header id="topbar" aria-label="Status bar"></header>
       <main id="stage">
         <section id="map" aria-label="World map"></section>
         <aside id="context-panel" aria-label="Context panel"></aside>
       </main>
-      <footer id="log" aria-label="Event log">Loading...</footer>
+      <div id="queue-bar" aria-label="Queued actions"></div>
+      <footer id="log" aria-label="Event log"></footer>
     </div>
+
+    <!-- Transient toast notice + modal mount point. -->
+    <div id="notice" aria-live="polite"></div>
+
     <script type="module" src="src/main.js"></script>
   </body>
 </html>

@@ -1,11 +1,26 @@
-/* base.css - layout, variables, typography.
-   Minimal shell for FEAT-001; expanded with the full UI in a later feature. */
+/* base.css
+   Layout, CSS variables, typography. Implements the DESIGN section 8 frame:
+   a top status bar, a left SVG map, a right tabbed context panel, a queued
+   actions tray, and a bottom log. Restrained palette, generous spacing, no
+   external fonts or CDNs (system font stack only). Responsive to window size. */
+
 :root {
-  --bg: #11161c;
-  --panel: #1b232d;
-  --ink: #e6ecf2;
-  --accent: #2e6fb0;
-  --border: #2c3744;
+  --bg: #0f141a;
+  --bg-2: #141b23;
+  --panel: #1a222c;
+  --panel-2: #212b36;
+  --ink: #e8eef4;
+  --ink-dim: #9fb0c0;
+  --muted: #74859a;
+  --accent: #3a86c8;
+  --accent-ink: #ffffff;
+  --danger: #c0493f;
+  --ok: #3a8f54;
+  --border: #2a3542;
+  --border-strong: #3a4a5c;
+  --radius: 8px;
+  --gap: 12px;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 }
 
 * {
@@ -18,32 +33,98 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--ink);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 15px;
+  line-height: 1.45;
 }
 
+.hidden {
+  display: none !important;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0 0 6px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+h3 {
+  margin-top: 16px;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+h4 {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+/* --- App frame ----------------------------------------------------------- */
 #app {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-areas:
+    "topbar"
+    "stage"
+    "queue"
+    "log";
   height: 100vh;
 }
 
 #topbar {
-  padding: 10px 16px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  font-weight: 600;
+  grid-area: topbar;
 }
 
 #stage {
+  grid-area: stage;
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: 1fr minmax(340px, 400px);
   min-height: 0;
 }
 
+#queue-bar {
+  grid-area: queue;
+}
+
 #log {
-  padding: 8px 16px;
+  grid-area: log;
+}
+
+#map {
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: radial-gradient(circle at 40% 30%, #132030, var(--bg) 70%);
+  display: flex;
+  flex-direction: column;
+}
+
+#context-panel {
+  min-height: 0;
+  overflow: auto;
   background: var(--panel);
-  border-top: 1px solid var(--border);
-  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Responsive: stack the map above the panel on narrow screens --------- */
+@media (max-width: 860px) {
+  #stage {
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(260px, auto);
+  }
+  #context-panel {
+    border-top: 1px solid var(--border);
+  }
 }

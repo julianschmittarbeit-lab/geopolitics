@@ -1,0 +1,14 @@
+# Dependencies (none at runtime; this is a zero-build project)
+node_modules/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Local save exports a player might drop into the folder
+geopolis-turn*.json
+
+# Logs
+*.log
