@@ -1,0 +1,10 @@
+{
+  "name": "geopolis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-based turn-based geopolitical strategy game (client-side only, zero-build).",
+  "scripts": {
+    "test": "node --test 'tests/**/*.test.mjs'"
+  }
+}

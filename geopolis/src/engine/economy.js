@@ -1,0 +1,155 @@
+// economy.js
+// Reducer-style economy functions. All mutation of GameState economy happens
+// here; all math is delegated to formulas.js. Each action returns a result
+// object { ok, reason, breakdown } so the UI can explain what happened.
+
+import {
+  gdp as gdpFormula,
+  gdpBreakdown,
+  taxRevenue,
+  taxRevenueBreakdown,
+  approvalDelta,
+  approvalDeltaBreakdown,
+  upkeepTotal,
+  recruitCost,
+  recruitCostBreakdown,
+  clamp,
+} from './formulas.js';
+import { UNIT_TYPES } from '../data/unitTypes.js';
+import { getState, getRegion } from './state.js';
+
+let unitIdCounter = 0;
+
+/**
+ * Recruit one unit of a type into a region the state owns.
+ * Validates treasury and population; deducts cost and population; appends Unit.
+ * @param {object} gameState
+ * @param {string} stateId
+ * @param {string} unitType
+ * @param {string} regionId
+ * @returns {{ok:boolean, reason:string|null, breakdown:object, unit?:object}}
+ */
+export function recruitUnit(gameState, stateId, unitType, regionId) {
+  const state = getState(gameState, stateId);
+  const def = UNIT_TYPES[unitType];
+  const region = getRegion(gameState, regionId);
+  const breakdown = recruitCostBreakdown(unitType, 1);
+
+  if (!state) return { ok: false, reason: 'unknown_state', breakdown };
+  if (!def) return { ok: false, reason: 'unknown_unit_type', breakdown };
+  if (!region) return { ok: false, reason: 'unknown_region', breakdown };
+  if (region.ownerStateId !== stateId) return { ok: false, reason: 'region_not_owned', breakdown };
+  if (state.treasury < breakdown.totalCost) return { ok: false, reason: 'insufficient_funds', breakdown };
+  if (state.population < breakdown.popCost) return { ok: false, reason: 'insufficient_population', breakdown };
+
+  state.treasury -= breakdown.totalCost;
+  state.population -= breakdown.popCost;
+
+  const unit = {
+    id: `u_rec_${stateId}_${unitIdCounter++}`,
+    type: unitType,
+    strength: def.maxStrength,
+    maxStrength: def.maxStrength,
+    experience: 0,
+    regionId,
+    movedThisTurn: false,
+  };
+  state.military.units.push(unit);
+
+  return { ok: true, reason: null, breakdown, unit };
+}
+
+/**
+ * Set a state's tax rate (clamped to 0..1).
+ * @returns {{ok:boolean, reason:string|null, taxRate:number}}
+ */
+export function setTaxRate(gameState, stateId, rate) {
+  const state = getState(gameState, stateId);
+  if (!state) return { ok: false, reason: 'unknown_state', taxRate: 0 };
+  const clamped = clamp(Number(rate) || 0, 0, 1);
+  state.economy.taxRate = clamped;
+  return { ok: true, reason: null, taxRate: clamped };
+}
+
+/**
+ * Invest into one economic sector (points clamped so the sector stays 0..100).
+ * @returns {{ok:boolean, reason:string|null, sector?:string, value?:number}}
+ */
+export function investSector(gameState, stateId, sector, points) {
+  const state = getState(gameState, stateId);
+  if (!state) return { ok: false, reason: 'unknown_state' };
+  if (!(sector in state.economy.sectors)) return { ok: false, reason: 'unknown_sector' };
+  const next = clamp(state.economy.sectors[sector] + Number(points || 0), 0, 100);
+  state.economy.sectors[sector] = next;
+  return { ok: true, reason: null, sector, value: next };
+}
+
+/**
+ * Apply one economy tick for a single state: recompute GDP, collect tax, pay
+ * upkeep and budgets, update approval and treasury. Returns a full breakdown.
+ * @param {object} gameState
+ * @param {string} stateId
+ * @returns {object} breakdown of the tick
+ */
+export function economyTick(gameState, stateId) {
+  const state = getState(gameState, stateId);
+  if (!state) return { ok: false, reason: 'unknown_state' };
+
+  const sectors = state.economy.sectors;
+  const sumSectors = sectors.industry + sectors.services + sectors.agriculture + sectors.energy;
+  const prevGdp = state.economy.gdp;
+
+  const gdpBd = gdpBreakdown(STATE_BASE_OUTPUT, sumSectors, state.approval);
+  const newGdp = gdpBd.gdp;
+  const revenueBd = taxRevenueBreakdown(newGdp, state.economy.taxRate);
+  const revenue = revenueBd.taxRevenue;
+
+  const upkeep = upkeepTotal(state.military.units);
+  const militaryBudget = state.military.budget;
+  const rnd = state.military.rnd;
+  const intelBudget = state.intel.budget;
+
+  const growth = prevGdp > 0 ? (newGdp - prevGdp) / prevGdp : 0;
+  const warWeariness = clampWeariness(state.atWarWith.length);
+  const apBd = approvalDeltaBreakdown({ taxRate: state.economy.taxRate, growth, warWeariness });
+  const newApproval = clampApproval(state.approval + apBd.approvalDelta);
+
+  const netTreasury = revenue - militaryBudget - intelBudget - rnd - upkeep;
+
+  // Commit mutations
+  state.economy.gdp = newGdp;
+  state.approval = newApproval;
+  state.treasury += netTreasury;
+
+  return {
+    ok: true,
+    stateId,
+    gdp: gdpBd,
+    revenue: revenueBd,
+    upkeep,
+    militaryBudget,
+    intelBudget,
+    rnd,
+    growth,
+    warWeariness,
+    approval: apBd,
+    netTreasury,
+    newTreasury: state.treasury,
+  };
+}
+
+// Base economic output used by the GDP formula; kept here so economy.js owns
+// the economic constants while formulas.js stays input-driven and pure.
+const STATE_BASE_OUTPUT = 1000;
+
+function clampApproval(v) {
+  return clamp(v, 0, 100);
+}
+
+function clampWeariness(numWars) {
+  // Each active war adds strain; capped at 1.
+  return clamp(numWars * 0.2, 0, 1);
+}
+
+// Re-export a couple of helpers so callers/tests can reach the math cleanly.
+export { gdpFormula as gdp, taxRevenue, approvalDelta, upkeepTotal, recruitCost };

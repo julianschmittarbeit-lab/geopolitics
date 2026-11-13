@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GEOPOLIS</title>
+    <link rel="stylesheet" href="styles/base.css" />
+    <link rel="stylesheet" href="styles/components.css" />
+  </head>
+  <body>
+    <!-- Root containers from DESIGN section 8. The full UI is wired in a later
+         feature; for now main.js just confirms the engine boots cleanly. -->
+    <div id="app">
+      <header id="topbar">GEOPOLIS</header>
+      <main id="stage">
+        <section id="map" aria-label="World map"></section>
+        <aside id="context-panel" aria-label="Context panel"></aside>
+      </main>
+      <footer id="log" aria-label="Event log">Loading...</footer>
+    </div>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>

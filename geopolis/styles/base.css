@@ -1,0 +1,49 @@
+/* base.css - layout, variables, typography.
+   Minimal shell for FEAT-001; expanded with the full UI in a later feature. */
+:root {
+  --bg: #11161c;
+  --panel: #1b232d;
+  --ink: #e6ecf2;
+  --accent: #2e6fb0;
+  --border: #2c3744;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+}
+
+#app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+}
+
+#topbar {
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+
+#stage {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  min-height: 0;
+}
+
+#log {
+  padding: 8px 16px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}

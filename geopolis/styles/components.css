@@ -1,0 +1,12 @@
+/* components.css - panels, buttons, map, tooltips.
+   Placeholder styling for FEAT-001; populated with the full UI later. */
+#map {
+  border-right: 1px solid var(--border);
+  padding: 16px;
+}
+
+#context-panel {
+  background: var(--panel);
+  padding: 16px;
+  overflow: auto;
+}
