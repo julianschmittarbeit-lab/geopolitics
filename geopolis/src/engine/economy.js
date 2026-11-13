@@ -123,15 +123,40 @@ export function economyTick(gameState, stateId) {
 
   const growth = prevGdp > 0 ? (newGdp - prevGdp) / prevGdp : 0;
   const warWeariness = clampWeariness(state.atWarWith.length);
-  const apBd = approvalDeltaBreakdown({ taxRate: state.economy.taxRate, growth, warWeariness });
-  const newApproval = clampApproval(state.approval + apBd.approvalDelta);
 
   const netTreasury = revenue - militaryBudget - intelBudget - rnd - upkeep;
+  const projected = state.treasury + netTreasury;
+
+  // --- Insolvency rule (transparent, DESIGN economy) ------------------------
+  // The treasury can never fall below 0. If projected spending would overdraw
+  // it, the state is insolvent this turn: spending is capped at the funds on
+  // hand, the treasury floors at 0, and the public reacts with an approval
+  // penalty proportional to the size of the shortfall. This gives a negative
+  // balance a real consequence instead of letting it run unbounded-negative.
+  let insolvent = false;
+  let shortfall = 0;
+  let insolvencyApprovalPenalty = 0;
+  if (projected < 0) {
+    insolvent = true;
+    shortfall = -projected; // money the state could not cover this turn
+    // Scale the penalty by shortfall relative to GDP; cap it so one bad turn
+    // is painful but not instantly fatal.
+    insolvencyApprovalPenalty = clamp((shortfall / Math.max(newGdp, 1)) * INSOLVENCY_APPROVAL_SCALE, 0, INSOLVENCY_APPROVAL_MAX);
+  }
+
+  // Consume this turn's accumulated battle mood (set by resolveBattle) so
+  // military success/failure feeds approval, then reset it for next turn.
+  const combatMood = state._combatMood || 0;
+  state._combatMood = 0;
+
+  const apBd = approvalDeltaBreakdown({ taxRate: state.economy.taxRate, growth, warWeariness, combatMood });
+  const approvalAfterDelta = state.approval + apBd.approvalDelta - insolvencyApprovalPenalty;
+  const newApproval = clampApproval(approvalAfterDelta);
 
   // Commit mutations
   state.economy.gdp = newGdp;
   state.approval = newApproval;
-  state.treasury += netTreasury;
+  state.treasury = Math.max(0, projected);
 
   return {
     ok: true,
@@ -146,6 +171,9 @@ export function economyTick(gameState, stateId) {
     warWeariness,
     approval: apBd,
     netTreasury,
+    insolvent,
+    shortfall,
+    insolvencyApprovalPenalty,
     newTreasury: state.treasury,
   };
 }
@@ -153,6 +181,11 @@ export function economyTick(gameState, stateId) {
 // Base economic output used by the GDP formula; kept here so economy.js owns
 // the economic constants while formulas.js stays input-driven and pure.
 const STATE_BASE_OUTPUT = 1000;
+
+// Insolvency approval penalty tuning: approvalPenalty = clamp(shortfall/gdp *
+// SCALE, 0, MAX). A shortfall equal to the whole GDP would cost the full MAX.
+const INSOLVENCY_APPROVAL_SCALE = 40;
+const INSOLVENCY_APPROVAL_MAX = 12;
 
 function clampApproval(v) {
   return clamp(v, 0, 100);

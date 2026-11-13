@@ -6,6 +6,7 @@
 // returns an object of named terms alongside the final value.
 
 import { UNIT_TYPES } from '../data/unitTypes.js';
+import { cost as techCostData, techMult as techMultData } from '../data/techs.js';
 
 /** Clamp a number into [lo, hi]. */
 export function clamp(value, lo, hi) {
@@ -36,18 +37,26 @@ export function gdpBreakdown(base, sumSectors, approval) {
 }
 
 /**
+ * Collection factor: the share of nominal tax that actually reaches the
+ * treasury. Calibrated (with the default budgets in state.js) so that a
+ * reasonably played state covers its fixed spending instead of going bankrupt.
+ * Surfaced in the tax-revenue breakdown so the number stays transparent.
+ */
+export const TAX_COLLECTION_FACTOR = 0.65;
+
+/**
  * Tax revenue collected from GDP.
- * taxRevenue = gdp * taxRate * 0.25
+ * taxRevenue = gdp * taxRate * TAX_COLLECTION_FACTOR
  * @param {number} gdpValue
  * @param {number} taxRate 0..1
  * @returns {number}
  */
 export function taxRevenue(gdpValue, taxRate) {
-  return gdpValue * taxRate * 0.25;
+  return gdpValue * taxRate * TAX_COLLECTION_FACTOR;
 }
 
 export function taxRevenueBreakdown(gdpValue, taxRate) {
-  const collectionFactor = 0.25;
+  const collectionFactor = TAX_COLLECTION_FACTOR;
   const value = gdpValue * taxRate * collectionFactor;
   return { gdp: gdpValue, taxRate, collectionFactor, taxRevenue: value };
 }
@@ -66,13 +75,30 @@ export function approvalDelta(p) {
   return approvalDeltaBreakdown(p).approvalDelta;
 }
 
-export function approvalDeltaBreakdown({ taxRate, growth, warWeariness }) {
+export function approvalDeltaBreakdown({ taxRate, growth, warWeariness, combatMood = 0 }) {
   // Neutral tax is 0.3; below raises approval, above lowers it.
   const taxTerm = (0.3 - taxRate) * 10; // +3 at zero tax, -7 at full tax
   const growthTerm = clamp(growth, -0.25, 0.25) * 40; // +/- up to 10
-  const warTerm = -clamp(warWeariness, 0, 1) * 8; // up to -8
-  const value = taxTerm + growthTerm + warTerm;
-  return { taxRate, growth, warWeariness, taxTerm, growthTerm, warTerm, approvalDelta: value };
+  const warTerm = -clamp(warWeariness, 0, 1) * 4; // up to -4 (softened)
+  // Military outcomes sway the public: victories raise approval, defeats lower
+  // it (DESIGN 5.1). combatMood is the net battle score accumulated this turn.
+  const combatTerm = clamp(combatMood, -5, 5);
+  // Peacetime recovery: with no active wars approval drifts back toward a
+  // stable baseline so a competent, non-belligerent state is not bled dry.
+  const peaceRecovery = warWeariness <= 0 ? 1.5 : 0;
+  const value = taxTerm + growthTerm + warTerm + combatTerm + peaceRecovery;
+  return {
+    taxRate,
+    growth,
+    warWeariness,
+    combatMood,
+    taxTerm,
+    growthTerm,
+    warTerm,
+    combatTerm,
+    peaceRecovery,
+    approvalDelta: value,
+  };
 }
 
 /**
@@ -90,18 +116,20 @@ export function upkeepTotal(units) {
 }
 
 // ---------------------------------------------------------------------------
-// 5.2 Military R&D (re-exported from data/techs for a single formulas surface)
+// 5.2 Military R&D
+// data/techs.js is the SINGLE SOURCE OF TRUTH for the R&D cost/multiplier
+// curves (DESIGN 5.2). formulas.js re-exports them so every caller reaches the
+// math through one surface and the two definitions cannot drift apart.
 // ---------------------------------------------------------------------------
 
-/** Research points to reach `level`: 100 * level^1.5. */
+/** Research points to reach `level`: 100 * level^1.5 (from data/techs.js). */
 export function techCost(level) {
-  if (level <= 0) return 0;
-  return 100 * Math.pow(level, 1.5);
+  return techCostData(level);
 }
 
-/** Combat multiplier at a tech level: 1 + 0.15*level. */
+/** Combat multiplier at a tech level: 1 + 0.15*level (from data/techs.js). */
 export function techMult(level) {
-  return 1 + 0.15 * level;
+  return techMultData(level);
 }
 
 // ---------------------------------------------------------------------------

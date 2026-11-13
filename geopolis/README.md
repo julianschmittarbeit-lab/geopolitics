@@ -87,6 +87,31 @@ klicken. Der Bericht zeigt jeden Term der Berechnung:
 
 So ist jeder Ausgang nachvollziehbar, nichts ist eine Blackbox.
 
+### Gebiete erobern (Rueckzug statt Vernichtung)
+
+Eine Region wechselt den Besitzer, wenn ihre Garnison aufgegeben wird, nicht
+erst wenn sie restlos vernichtet ist. Verliert die Garnison ein Gefecht und
+faellt eine Einheit dabei unter die Haelfte ihrer Maximalstaerke
+(`RETREAT_STRENGTH_FRACTION = 0.5`), bricht sie und zieht sich in eine
+angrenzende eigene Region zurueck. Gibt es keine solche Rueckzugsregion, wird
+die gebrochene Einheit vernichtet. Haelt eine Einheit oberhalb der Schwelle,
+bleibt die Region umkaempft. So kostet eine verteidigte Region anhaltenden
+militaerischen Druck (mehrere erfolgreiche Angriffe), waehrend eine
+unverteidigte oder fast zerschlagene Garnison sofort Boden preisgibt. Der
+Gefechtsbericht listet jeden Rueckzug (`retreats`) offen auf.
+
+### Wirtschaft und Zahlungsunfaehigkeit
+
+Pro Runde gilt `Schatz += Steuereinnahmen - Militaer - Geheimdienst - Forschung
+- Unterhalt`. Die Steuereinnahmen sind `BIP * Steuersatz * 0.65`
+(`TAX_COLLECTION_FACTOR`); zusammen mit den Startbudgets ist ein vernuenftig
+gefuehrter Staat damit tragfaehig und rutscht nicht in ein unbegrenztes Minus.
+Der Schatz kann nie unter 0 fallen: wuerden die Ausgaben einer Runde ihn
+ueberziehen, ist der Staat zahlungsunfaehig, der Schatz wird auf 0 gesetzt und
+die Bevoelkerung reagiert mit einem Zustimmungsabzug, der mit der Hoehe der
+Deckungsluecke steigt. Zahlungsunfaehigkeit hat also Folgen statt ignoriert zu
+werden; der Zustimmungsabzug steht transparent in der Wirtschafts-Aufschluesselung.
+
 ### Speichern und Laden
 
 - **Speichern:** legt den Spielstand im Browser ab (localStorage). Nach jedem

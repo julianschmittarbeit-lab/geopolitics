@@ -151,11 +151,22 @@ All formulas are pure functions, unit-tested, and surfaced in UI breakdowns.
 
 ### 5.1 Economy
 - `gdp = base * (1 + 0.004*sum(sectorInvestments)) * (0.6 + 0.4*approval/100)`
-- `taxRevenue = gdp * taxRate * 0.25`
-- `approvalDelta = +f(lowTax) + f(economyGrowth) - f(highTax) - f(warWeariness)`
-  - High tax lowers approval; growth and winning wars raise it; losses lower it.
-- `treasury += taxRevenue - militaryBudget - intelBudget - rnd - upkeep`
+- `taxRevenue = gdp * taxRate * TAX_COLLECTION_FACTOR` (collection factor 0.65).
+  The factor plus the starting budgets are calibrated so a reasonably played
+  state covers its fixed spending instead of sliding into an unbounded deficit.
+- `approvalDelta = +f(lowTax) + f(economyGrowth) + f(combatMood) + f(peace)
+  - f(highTax) - f(warWeariness)`
+  - High tax and war weariness lower approval; growth, winning battles
+    (combatMood), and peacetime recovery raise it. Insolvency applies an extra
+    approval penalty (see below).
+- `treasury += taxRevenue - militaryBudget - intelBudget - rnd - upkeep`,
+  then floored at 0.
 - `upkeep = sum(unit.upkeep)` per unit type.
+- **Insolvency rule:** the treasury can never go negative. If a turn's spending
+  would overdraw it, the state is insolvent that turn: the treasury is clamped
+  to 0 and approval takes a penalty scaled by the shortfall relative to GDP
+  (capped). A negative balance therefore has a transparent consequence rather
+  than running unbounded-negative.
 
 ### 5.2 Military R&D
 - Each turn a state's `rnd` adds research points to a chosen branch.
@@ -190,6 +201,14 @@ intensity = 1 - abs(odds - 0.5)*? ...     // closer fight => heavier losses both
 loserLoss = 0.35..0.70 of engaged strength
 winnerLoss = loserLoss * (1 - odds or odds)  // winner loses less the stronger they were
 ```
+- **Capture by retreat (not annihilation):** when the attacker wins, any
+  defending unit left below `RETREAT_STRENGTH_FRACTION` (0.5) of its max
+  strength breaks and retreats into an adjacent region its owner still controls;
+  with no friendly fallback it is destroyed. Units that held above the threshold
+  keep the region contested. The region's owner changes once no defenders
+  remain in it. This makes a defended region fall to sustained pressure
+  (several winning assaults) while an undefended or near-broken garrison yields
+  at once. Every retreat is listed in the BattleReport.
 - **Combined arms:** mixing infantry + armor + air gives a bonus (documented).
 - **Missiles:** one-shot strike units - deal pre-battle damage then are consumed.
 - **Air/Navy:** air contributes to land battles at reduced ground factor; navy

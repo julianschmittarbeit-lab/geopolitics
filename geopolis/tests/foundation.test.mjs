@@ -89,8 +89,10 @@ test('gdp formula matches DESIGN 5.1', () => {
   assert.ok(Math.abs(F.gdp(1000, 100, 50) - 1120) < 1e-9);
 });
 
-test('taxRevenue = gdp * taxRate * 0.25', () => {
-  assert.equal(F.taxRevenue(1000, 0.4), 100);
+test('taxRevenue = gdp * taxRate * TAX_COLLECTION_FACTOR', () => {
+  // Collection factor is calibrated in formulas.js; the breakdown surfaces it.
+  assert.equal(F.taxRevenue(1000, 0.4), 1000 * 0.4 * F.TAX_COLLECTION_FACTOR);
+  assert.equal(F.taxRevenueBreakdown(1000, 0.4).collectionFactor, F.TAX_COLLECTION_FACTOR);
   assert.equal(F.taxRevenue(2000, 0), 0);
 });
 

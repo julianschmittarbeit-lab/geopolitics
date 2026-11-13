@@ -14,6 +14,7 @@ import {
   rndTick,
   forceSummary,
 } from '../src/engine/military.js';
+import * as MIL from '../src/engine/military.js';
 import {
   getRelation,
   setRelation,
@@ -28,6 +29,7 @@ import {
 import { runOperation } from '../src/engine/intel.js';
 import { runAiTurn } from '../src/engine/ai.js';
 import { endTurn } from '../src/engine/turn.js';
+import * as ECON from '../src/engine/economy.js';
 import * as F from '../src/engine/formulas.js';
 
 // ---------------------------------------------------------------------------
@@ -392,9 +394,15 @@ test('multi-turn simulation is stable, deterministic, and preserves invariants',
   assert.equal(a.turn, 16);
   assert.equal(JSON.stringify(a.states), JSON.stringify(b.states));
 
-  // Invariants: unit strengths within [0,max]; treasuries finite.
+  // Invariants: treasuries stay within the sane bounds enforced by the
+  // insolvency rule (floored at 0, never unbounded-negative) and unit
+  // strengths stay within [0, max]. The floor is what makes the economy
+  // coherent; a regression that removed it would fail here.
+  const TREASURY_UPPER_BOUND = 1_000_000; // generous sanity cap
   for (const st of Object.values(a.states)) {
     assert.ok(Number.isFinite(st.treasury));
+    assert.ok(st.treasury >= 0, `treasury must not go negative, got ${st.treasury} for ${st.id}`);
+    assert.ok(st.treasury <= TREASURY_UPPER_BOUND, `treasury implausibly high: ${st.treasury}`);
     assert.ok(st.approval >= 0 && st.approval <= 100);
     for (const u of st.military.units) {
       assert.ok(u.strength >= 0 && u.strength <= u.maxStrength, `unit ${u.id} strength ${u.strength}`);
@@ -422,4 +430,151 @@ test('player queued attack action is applied through endTurn', () => {
     { type: 'attack', regionId: s.targetRegionId, attackingUnitIds: s.attackerIds },
   ]);
   assert.ok(next.log.some((e) => e.kind === 'battle'));
+});
+
+// ---------------------------------------------------------------------------
+// Economy solvency (rebalanced numbers + insolvency rule)
+// ---------------------------------------------------------------------------
+
+test('a passive player stays solvent (treasury never negative) over 30 turns', () => {
+  for (const seed of [7, 3, 11, 1, 2]) {
+    let g = newGame({ seed });
+    for (let i = 0; i < 30; i++) {
+      g = endTurn(g, []);
+      assert.ok(
+        getState(g, 'player').treasury >= 0,
+        `passive player went insolvent-negative at turn ${g.turn} (seed ${seed})`
+      );
+    }
+  }
+});
+
+test('every state treasury is bounded (never unbounded-negative) over a 30-turn sim', () => {
+  let g = newGame({ seed: 7 });
+  for (let i = 0; i < 30; i++) {
+    g = endTurn(g, []);
+    for (const st of Object.values(g.states)) {
+      assert.ok(st.treasury >= 0, `state ${st.id} treasury ${st.treasury} < 0 at turn ${g.turn}`);
+    }
+  }
+});
+
+test('insolvency floors the treasury at 0 and penalizes approval', () => {
+  const g = newGame({ seed: 1 });
+  const st = getState(g, 'player');
+  // Force a deep shortfall: tiny treasury, huge military budget.
+  st.treasury = 10;
+  st.military.budget = 5000;
+  const approvalBefore = st.approval;
+  const bd = ECON.economyTick(g, 'player');
+  assert.equal(st.treasury, 0, 'treasury must floor at 0, not go negative');
+  assert.equal(bd.insolvent, true);
+  assert.ok(bd.shortfall > 0);
+  assert.ok(bd.insolvencyApprovalPenalty > 0);
+  assert.ok(st.approval < approvalBefore, 'insolvency should cost approval');
+});
+
+// ---------------------------------------------------------------------------
+// Territory capture (sustained pressure takes ground)
+// ---------------------------------------------------------------------------
+
+test('a clearly stronger attacker captures a defended region within a few assaults', () => {
+  // A dominant attacking stack vs a single defender should take the region
+  // through sustained pressure well within N assaults, for every seed.
+  const N = 6;
+  for (let seed = 0; seed < 20; seed++) {
+    const g = newGame({ seed });
+    const s = setupBattle(g, {
+      attackerTypes: ['armor', 'armor', 'armor', 'air'],
+      defenderTypes: ['infantry'],
+    });
+    let captured = false;
+    for (let assault = 0; assault < N && !captured; assault++) {
+      // Fresh, undepleted attackers each assault (reinforcements arrive).
+      const player = getState(g, 'player');
+      for (const u of player.military.units) {
+        if (s.attackerIds.includes(u.id)) {
+          u.strength = u.maxStrength;
+          u.movedThisTurn = false;
+        }
+      }
+      const res = resolveBattle(g, 'player', s.targetRegionId, s.attackerIds, createRng(seed * 13 + assault));
+      if (res.ok && res.report.ownershipChanged) captured = true;
+      if (getRegion(g, s.targetRegionId).ownerStateId === 'player') captured = true;
+    }
+    assert.ok(captured, `stronger attacker failed to capture within ${N} assaults (seed ${seed})`);
+  }
+});
+
+test('an AI-only world changes region ownership within 30 turns (wars resolve)', () => {
+  // Across a spread of seeds, at least most should see the map change hands;
+  // a frozen-map regression (capture requiring a full garrison wipe) would
+  // drop this to near zero.
+  let seedsWithCapture = 0;
+  const seeds = 20;
+  for (let seed = 0; seed < seeds; seed++) {
+    let g = newGame({ seed });
+    const owners0 = Object.fromEntries(Object.keys(g.regions).map((r) => [r, g.regions[r].ownerStateId]));
+    for (let i = 0; i < 30; i++) g = endTurn(g, []);
+    const changed = Object.keys(g.regions).some((r) => g.regions[r].ownerStateId !== owners0[r]);
+    if (changed) seedsWithCapture += 1;
+  }
+  assert.ok(
+    seedsWithCapture >= seeds * 0.75,
+    `expected most seeds to see territory change hands, got ${seedsWithCapture}/${seeds}`
+  );
+});
+
+test('retreat mechanic is transparent and only broken garrisons yield the region', () => {
+  // Sustained pressure, not a single engagement, takes a defended region. The
+  // report exposes retreats; a unit retreats (and the region flips) only once
+  // it is beaten below the retreat threshold, otherwise it holds.
+  const g = newGame({ seed: 5 });
+  const s = setupBattle(g, {
+    attackerTypes: ['armor', 'armor', 'armor', 'air'],
+    defenderTypes: ['infantry'],
+  });
+  const res = resolveBattle(g, 'player', s.targetRegionId, s.attackerIds, createRng(1));
+  assert.ok(res.ok);
+  assert.ok(Array.isArray(res.report.retreats), 'report must expose retreat outcomes');
+
+  const defender = getState(g, s.defenderId);
+  const garrison = defender.military.units.filter((u) => u.regionId === s.targetRegionId && u.strength > 0);
+  if (res.report.ownershipChanged) {
+    // Region flipped: no un-broken defender should remain in it.
+    assert.equal(getRegion(g, s.targetRegionId).ownerStateId, 'player');
+    assert.equal(garrison.length, 0);
+  } else if (res.report.attackerWins) {
+    // Attacker won but the garrison held above the retreat threshold.
+    assert.ok(
+      garrison.every((u) => u.strength >= u.maxStrength * MIL.RETREAT_STRENGTH_FRACTION),
+      'any garrison that stayed must be above the retreat threshold'
+    );
+  }
+});
+
+test('a broken garrison with no friendly fallback is destroyed and the region flips', () => {
+  // Isolate the target so the defender has no adjacent owned region to retreat
+  // into, then hit it hard enough to break it: it must be destroyed, not teleport.
+  const g = newGame({ seed: 5 });
+  const s = setupBattle(g, {
+    attackerTypes: ['armor', 'armor', 'armor', 'armor', 'air', 'air'],
+    defenderTypes: ['infantry'],
+  });
+  const defender = getState(g, s.defenderId);
+  // Strand the garrison: give it a single weakened unit and remove the owner's
+  // other regions' adjacency as a fallback by moving all its other units away.
+  defender.military.units = defender.military.units.filter((u) => u.regionId === s.targetRegionId);
+  for (const u of defender.military.units) u.strength = 20; // already near-broken
+  // Make the defender own no region adjacent to the target.
+  const target = getRegion(g, s.targetRegionId);
+  for (const adj of target.adjacency) {
+    if (getRegion(g, adj).ownerStateId === s.defenderId) getRegion(g, adj).ownerStateId = 'southreach';
+  }
+  const res = resolveBattle(g, 'player', s.targetRegionId, s.attackerIds, createRng(2));
+  assert.ok(res.ok);
+  if (res.report.attackerWins) {
+    assert.equal(getRegion(g, s.targetRegionId).ownerStateId, 'player');
+    assert.ok(res.report.retreats.some((r) => r.destroyed), 'stranded broken garrison must be destroyed');
+  }
 });

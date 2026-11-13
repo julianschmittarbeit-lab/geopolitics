@@ -17,18 +17,34 @@ const STATE_DEFAULTS = {
   sectors: { industry: 40, services: 40, agriculture: 30, energy: 30 },
   approval: 60,
   population: 5_000_000,
-  militaryBudget: 300,
-  rnd: 100,
-  intelBudget: 100,
+  // Budgets are calibrated against the tax-collection factor in formulas.js so
+  // that a reasonably played state runs close to break-even at the starting
+  // numbers (see README / DESIGN economy notes). Tuning these three plus the
+  // collection factor keeps the economy solvent instead of unbounded-negative.
+  militaryBudget: 120,
+  rnd: 60,
+  intelBudget: 40,
   agents: 2,
   counterIntel: 10,
 };
 
 /**
- * Starting garrison each state fields, placed in its capital-ish regions.
- * Kept small; recruitment expands forces during play.
+ * Starting garrison each state fields. Each entry is [unitType, regionIndex]
+ * where regionIndex selects which owned region (0 = capital) the unit starts
+ * in. Garrisons are concentrated so that a frontier region is not a one-unit
+ * paper target: every region gets a defender and the capital is held in force.
+ * This gives a new (even passive) player several turns of runway rather than
+ * losing a region to the first enemy stack. Recruitment expands forces in play.
  */
-const STARTING_FORCE = ['infantry', 'infantry', 'armor'];
+const STARTING_FORCE = [
+  ['infantry', 0],
+  ['infantry', 0],
+  ['armor', 0],
+  ['infantry', 1],
+  ['armor', 1],
+  ['infantry', 2],
+  ['infantry', 2],
+];
 
 /**
  * Deep clone a plain-data value (GameState and its parts are JSON-safe).
@@ -102,13 +118,13 @@ export function newGame(opts = {}) {
       knownInfo[otherId] = null;
     }
 
-    // Place the starting garrison across owned regions, round-robin.
+    // Place the starting garrison, concentrating per the [type, regionIndex]
+    // layout above and clamping the index to the regions the state owns.
     const units = [];
-    STARTING_FORCE.forEach((type, i) => {
-      const regionId = ownedRegions.length ? ownedRegions[i % ownedRegions.length] : null;
-      if (regionId) {
-        units.push(makeUnit(`${id}_${unitCounter++}`, type, regionId));
-      }
+    STARTING_FORCE.forEach(([type, regionIndex]) => {
+      if (!ownedRegions.length) return;
+      const regionId = ownedRegions[Math.min(regionIndex, ownedRegions.length - 1)];
+      units.push(makeUnit(`${id}_${unitCounter++}`, type, regionId));
     });
 
     states[id] = {

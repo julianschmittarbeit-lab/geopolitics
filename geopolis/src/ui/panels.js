@@ -145,6 +145,11 @@ function renderMilitary(root, ctx) {
   const unitsHere = unitsInRegion(game, sel.id);
   root.appendChild(unitList(game, unitsHere, true));
 
+  // Units already committed to a queued attack this turn cannot be moved or
+  // queued into a second attack. We reserve them here so one stack is never
+  // double-spent in a single turn (transparent: reserved units are labelled).
+  const reserved = reservedUnitIds(ui);
+
   // Move controls for player units in this region
   const playerUnitsHere = unitsHere.filter((u) => u.ownerStateId === player.id);
   if (playerUnitsHere.length > 0 && sel.adjacency.length > 0) {
@@ -153,7 +158,9 @@ function renderMilitary(root, ctx) {
       const def = UNIT_TYPES[u.type];
       const row = el('div', { class: 'action-row' });
       row.appendChild(el('span', { class: 'action-label', text: `${unitTypeName(game, def)} (${u.strength})` }));
-      if (u.movedThisTurn) {
+      if (reserved.has(u.id)) {
+        row.appendChild(el('span', { class: 'queued-flag', text: t(game, 'mil.reservedForAttack') }));
+      } else if (u.movedThisTurn) {
         row.appendChild(el('span', { class: 'muted', text: t(game, 'mil.movedThisTurn') }));
       } else {
         const select = el('select', { class: 'select' });
@@ -184,7 +191,9 @@ function renderMilitary(root, ctx) {
   const enemyAdjacent = sel.adjacency
     .map((id) => getRegion(game, id))
     .filter((r) => r && r.ownerStateId !== player.id);
-  const readyAttackers = playerUnitsHere.filter((u) => !u.movedThisTurn);
+  // Only units that have not moved AND are not already reserved for a queued
+  // attack this turn are available to commit to a new attack.
+  const readyAttackers = playerUnitsHere.filter((u) => !u.movedThisTurn && !reserved.has(u.id));
   if (enemyAdjacent.length > 0 && readyAttackers.length > 0) {
     root.appendChild(el('h4', { text: t(game, 'mil.attack') }));
     for (const r of enemyAdjacent) {
@@ -530,6 +539,22 @@ function unitList(game, units, showOwner) {
     );
   }
   return wrap;
+}
+
+/**
+ * Set of unit ids already committed to a queued attack this turn. Used to stop
+ * one stack from being double-committed (attacked twice, or attacked and moved).
+ * @param {object} ui transient UI state holding queuedActions
+ * @returns {Set<string>}
+ */
+function reservedUnitIds(ui) {
+  const ids = new Set();
+  for (const a of ui.queuedActions || []) {
+    if (a.type === 'attack' && Array.isArray(a.attackingUnitIds)) {
+      for (const id of a.attackingUnitIds) ids.add(id);
+    }
+  }
+  return ids;
 }
 
 function countRegions(game, stateId) {

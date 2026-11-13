@@ -145,6 +145,19 @@ export function moraleOf(state) {
 export const MISSILE_STRIKE_FRACTION = 0.25;
 
 /**
+ * A defending unit breaks and retreats only once a winning assault leaves it
+ * below this fraction of its max strength. Above it, the unit holds and the
+ * region stays contested, so taking a defended region requires sustained
+ * pressure (several successful assaults) rather than one engagement.
+ */
+export const RETREAT_STRENGTH_FRACTION = 0.5;
+
+/** Approval mood swing from a single battle outcome (win +, loss -). */
+export const COMBAT_MOOD_BATTLE = 1.5;
+/** Larger approval mood swing when a battle captures / loses a region. */
+export const COMBAT_MOOD_CAPTURE = 3;
+
+/**
  * Build the per-unit power contributions for one side, returning a list of
  * breakdowns plus the summed side power (before the morale multiplier).
  * @param {object} gameState
@@ -154,6 +167,26 @@ export const MISSILE_STRIKE_FRACTION = 0.25;
  * @param {boolean} applyTerrain whether terrain modifiers apply (defender only)
  * @returns {{contributions:object[], summedPower:number, combinedArms:number, presentTypes:string[]}}
  */
+/**
+ * Choose the region a beaten garrison retreats into: an adjacent region still
+ * owned by the defending state. Deterministic (first in adjacency order) so the
+ * outcome is reproducible. Returns null when the garrison is encircled (no
+ * friendly neighbor), in which case the caller destroys it.
+ * @param {object} gameState
+ * @param {string} defenderStateId
+ * @param {string} fromRegionId
+ * @returns {string|null}
+ */
+function retreatRegionFor(gameState, defenderStateId, fromRegionId) {
+  const from = getRegion(gameState, fromRegionId);
+  if (!from) return null;
+  for (const adj of from.adjacency) {
+    const r = getRegion(gameState, adj);
+    if (r && r.ownerStateId === defenderStateId) return adj;
+  }
+  return null;
+}
+
 function sidePower(gameState, stateId, units, terrain, applyTerrain) {
   const state = getState(gameState, stateId);
   const presentTypes = [...new Set(units.map((u) => u.type))];
@@ -312,14 +345,49 @@ export function resolveBattle(gameState, attackerStateId, defenderRegionId, atta
   pruneDead(attacker);
   pruneDead(defender);
 
-  // --- 7. Region ownership transfer -----------------------------------------
-  const remainingDefenders = defender
-    ? defender.military.units.filter((u) => u.regionId === defenderRegionId && u.strength > 0)
-    : [];
+  // --- 7. Retreat + region ownership transfer -------------------------------
+  // When the attacker wins, the surviving garrison RETREATS to an adjacent
+  // region its owner still controls; if it has nowhere to fall back to, it is
+  // destroyed. This is what lets sustained military pressure actually take
+  // ground (DESIGN 5.4): capture no longer requires annihilating the whole
+  // garrison in a single battle, only winning the engagement. Every retreat is
+  // recorded in the report so the outcome stays transparent.
+  const retreats = [];
+  let ownershipChanged = false;
+  if (attackerWins) {
+    // Only a badly beaten garrison (each unit below RETREAT_STRENGTH_FRACTION
+    // of its max strength) breaks and retreats; units that held above that
+    // threshold stand their ground and keep the region contested. This makes a
+    // defended region fall to SUSTAINED pressure (several winning assaults that
+    // grind the garrison down) rather than to a single lucky engagement, while
+    // an undefended or near-destroyed garrison still yields ground at once.
+    const garrison = defender
+      ? defender.military.units.filter((u) => u.regionId === defenderRegionId && u.strength > 0)
+      : [];
+    const broken = garrison.filter((u) => u.strength < u.maxStrength * RETREAT_STRENGTH_FRACTION);
+    if (broken.length > 0) {
+      const fallback = retreatRegionFor(gameState, defenderStateId, defenderRegionId);
+      for (const u of broken) {
+        if (fallback) {
+          u.regionId = fallback;
+          u.movedThisTurn = true;
+          retreats.push({ unitId: u.id, type: u.type, toRegionId: fallback, destroyed: false });
+        } else {
+          // Encircled with no friendly fallback: the broken unit is destroyed.
+          u.strength = 0;
+          retreats.push({ unitId: u.id, type: u.type, toRegionId: null, destroyed: true });
+        }
+      }
+      if (defender) defender.military.units = defender.military.units.filter((u) => u.strength > 0);
+    }
+  }
+
   const survivingAttackers = attacker.military.units.filter(
     (u) => groundAttackUnits.some((g) => g.id === u.id) && u.strength > 0
   );
-  let ownershipChanged = false;
+  const remainingDefenders = defender
+    ? defender.military.units.filter((u) => u.regionId === defenderRegionId && u.strength > 0)
+    : [];
   if (attackerWins && remainingDefenders.length === 0 && survivingAttackers.length > 0) {
     region.ownerStateId = attackerStateId;
     for (const u of survivingAttackers) {
@@ -327,6 +395,16 @@ export function resolveBattle(gameState, attackerStateId, defenderRegionId, atta
       u.movedThisTurn = true;
     }
     ownershipChanged = true;
+  }
+
+  // Public mood from the engagement (consumed by economyTick this turn). A
+  // decisive capture sways opinion more than an inconclusive clash.
+  const moodWin = ownershipChanged ? COMBAT_MOOD_CAPTURE : COMBAT_MOOD_BATTLE;
+  if (attacker) {
+    attacker._combatMood = (attacker._combatMood || 0) + (attackerWins ? moodWin : -COMBAT_MOOD_BATTLE);
+  }
+  if (defender && defenderStateId !== attackerStateId) {
+    defender._combatMood = (defender._combatMood || 0) + (attackerWins ? -moodWin : COMBAT_MOOD_BATTLE);
   }
 
   const report = {
@@ -361,6 +439,7 @@ export function resolveBattle(gameState, attackerStateId, defenderRegionId, atta
     casualtyFractions: { attacker: cas.attackerLoss, defender: cas.defenderLoss },
     attackerCasualties,
     defenderCasualties,
+    retreats,
     ownershipChanged,
     newOwnerStateId: region.ownerStateId,
   };

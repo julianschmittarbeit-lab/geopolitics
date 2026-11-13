@@ -102,6 +102,7 @@ export const STRINGS = {
     'mil.research': 'Forschung',
     'mil.movedThisTurn': 'bereits bewegt',
     'mil.queuedAttack': 'Angriff eingeplant',
+    'mil.reservedForAttack': 'fuer Angriff reserviert',
 
     // Economy panel
     'eco.taxRate': 'Steuersatz',
@@ -300,6 +301,7 @@ export const STRINGS = {
     'mil.research': 'Research',
     'mil.movedThisTurn': 'already moved',
     'mil.queuedAttack': 'Attack queued',
+    'mil.reservedForAttack': 'reserved for attack',
 
     'eco.taxRate': 'Tax rate',
     'eco.sectors': 'Economic sectors',
