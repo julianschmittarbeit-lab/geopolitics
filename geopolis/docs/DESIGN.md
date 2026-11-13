@@ -1,4 +1,4 @@
-# GEOPOLIS — Design & Roadmap
+# GEOPOLIS - Design & Roadmap
 
 > A browser-based turn-based geopolitical strategy game. Military-focused, with
 > coupled Diplomacy, Intelligence, and Economy subsystems. Inspired by the genre
@@ -167,7 +167,7 @@ All formulas are pure functions, unit-tested, and surfaced in UI breakdowns.
 - Cost/upkeep/maxStrength are per unit type in `unitTypes.js`.
 - Recruitment capped by `population` and treasury.
 
-### 5.4 Battle resolution (TRANSPARENT — the centerpiece)
+### 5.4 Battle resolution (TRANSPARENT - the centerpiece)
 Battles are resolved deterministically given a seed; every term is reported.
 
 For attacker vs defender over a contested region:
@@ -191,7 +191,7 @@ loserLoss = 0.35..0.70 of engaged strength
 winnerLoss = loserLoss * (1 - odds or odds)  // winner loses less the stronger they were
 ```
 - **Combined arms:** mixing infantry + armor + air gives a bonus (documented).
-- **Missiles:** one-shot strike units — deal pre-battle damage then are consumed.
+- **Missiles:** one-shot strike units - deal pre-battle damage then are consumed.
 - **Air/Navy:** air contributes to land battles at reduced ground factor; navy
   controls coastal regions and enables amphibious attacks.
 - Every battle produces a **BattleReport**: list of each modifier, the computed
@@ -208,7 +208,7 @@ winnerLoss = loserLoss * (1 - odds or odds)  // winner loses less the stronger t
   - 0.03*targetCounterIntel, 0.05, 0.95)`
 - Ops: `gatherInfo` (reveals dossier: treasury/military estimates),
   `sabotage` (damage economy/units), `counterIntel` (raise own defense).
-- Failed ops can be **detected**, causing relation penalties — shown to player.
+- Failed ops can be **detected**, causing relation penalties - shown to player.
 
 ## 6. AI decision logic (transparent utility model)
 
@@ -269,7 +269,7 @@ show the formula breakdown for any number.
 
 ## 10. Milestone roadmap
 
-### Milestone 1 — Fully playable vertical slice (THIS DELIVERY)
+### Milestone 1 - Fully playable vertical slice (THIS DELIVERY)
 Map of ~10–14 regions, 4–5 states (1 player + 3–4 AI). All four subsystems
 present and coupled: economy (tax/sectors/approval/treasury), military (5 unit
 types, recruit, R&D, move, transparent battles, war/peace), diplomacy (relations,
@@ -277,18 +277,18 @@ alliance + non-aggression + peace, declare war), intel (gather info, sabotage,
 counter-intel). Transparent AI opponents. Turn loop. Save/load (localStorage +
 file). Readable DE/EN UI with formula breakdowns. Unit tests for engine+formulas.
 
-### Milestone 2 — Depth
+### Milestone 2 - Depth
 Larger map, more unit subtypes & combined-arms nuance, supply/logistics,
 unit experience & veterancy UI, richer tech tree, multiple treaty types, trade
 deals, embargoes, UN-style votes, more intel ops (coup, disinformation),
 difficulty levels, event system (random/world events).
 
-### Milestone 3 — Breadth & polish
+### Milestone 3 - Breadth & polish
 More states & a real geographic map, domestic politics (elections, parties,
 laws), media/propaganda, detailed budgets, scenarios/campaigns, scripting for
 events, accessibility & localization pass, balance tuning via telemetry.
 
-### Milestone 4 — Advanced
+### Milestone 4 - Advanced
 Naval/air theatres as first-class maps, nuclear deterrence & doctrines,
 coalition warfare, long diplomacy chains, modding data files, optional PWA
 packaging for offline install.

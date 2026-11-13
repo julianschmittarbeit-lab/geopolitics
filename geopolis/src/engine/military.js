@@ -125,7 +125,7 @@ export function forceSummary(gameState, stateId) {
 }
 
 // ---------------------------------------------------------------------------
-// Battle resolution — the transparent military centerpiece (DESIGN 5.4).
+// Battle resolution - the transparent military centerpiece (DESIGN 5.4).
 // Every named modifier, both side powers, the odds, the single RNG roll, and
 // per-unit casualties are returned in a BattleReport. No black boxes.
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 // Reproducible: the same seed always produces the same sequence.
 // All randomness in the game flows through here so battles and AI are testable.
 //
-// Implementation: mulberry32 — a small, fast, well-distributed 32-bit PRNG.
+// Implementation: mulberry32 - a small, fast, well-distributed 32-bit PRNG.
 
 /**
  * Normalize an arbitrary seed value into a 32-bit unsigned integer.
