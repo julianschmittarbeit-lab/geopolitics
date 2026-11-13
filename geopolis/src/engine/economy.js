@@ -18,7 +18,19 @@ import {
 import { UNIT_TYPES } from '../data/unitTypes.js';
 import { getState, getRegion } from './state.js';
 
-let unitIdCounter = 0;
+/**
+ * Allocate a deterministic, per-game unique unit id. The counter lives on the
+ * GameState (not a module global) so two separate endTurn runs from the same
+ * cloned state produce identical ids, preserving reproducibility.
+ * @param {object} gameState
+ * @param {string} stateId
+ * @returns {string}
+ */
+function nextUnitId(gameState, stateId) {
+  if (typeof gameState._unitSeq !== 'number') gameState._unitSeq = 0;
+  gameState._unitSeq += 1;
+  return `u_rec_${stateId}_${gameState._unitSeq}`;
+}
 
 /**
  * Recruit one unit of a type into a region the state owns.
@@ -46,7 +58,7 @@ export function recruitUnit(gameState, stateId, unitType, regionId) {
   state.population -= breakdown.popCost;
 
   const unit = {
-    id: `u_rec_${stateId}_${unitIdCounter++}`,
+    id: nextUnitId(gameState, stateId),
     type: unitType,
     strength: def.maxStrength,
     maxStrength: def.maxStrength,
